@@ -1,14 +1,13 @@
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
-const bcrypt = require('bcrypt'); // Add bcrypt for password hashing
+const bcrypt = require('bcrypt');
 
 const app = express();
 const port = 3000;
 
 app.use(express.json());
 
-// Initialize the database with error handling
 let db;
 try {
   db = new sqlite3.Database("unipod.db", (err) => {
@@ -24,7 +23,7 @@ try {
 }
 
 db.serialize(() => {
-  // Updated users table to include password
+
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       email TEXT PRIMARY KEY,
@@ -73,7 +72,7 @@ db.serialize(() => {
     )
   `);
 
-  // Add password column if it doesn't exist
+
   db.run(`ALTER TABLE users ADD COLUMN password TEXT`, (err) => {
     if (err && !err.message.includes('duplicate column name')) {
       console.error('Error adding password column:', err.message);
@@ -97,13 +96,13 @@ db.serialize(() => {
     }
   });
 
-  // Update sample data with hashed passwords
+  
   db.get("SELECT COUNT(*) AS count FROM users", (err, row) => {
     if (err) {
       console.error("Error checking users table:", err.message);
     } else if (row.count === 0) {
       console.log("Inserting sample user data...");
-      // Hash passwords for sample users
+     
       bcrypt.hash('password123', 10, (err, hash1) => {
         if (err) {
           console.error("Error hashing password:", err);
@@ -146,7 +145,7 @@ db.serialize(() => {
   });
 });
 
-const paychanguSecretKey = "sec-live-904Pvclq6zp1qxb3MbQuMWjw65WHCIBp";
+const paychanguSecretKey = "";
 
 let supportedOperators = null;
 
@@ -190,7 +189,7 @@ function getOperatorRefId(operatorName) {
   return operator ? operator.ref_id : null;
 }
 
-// NEW: Register endpoint
+
 app.post("/api/register", async (req, res) => {
   const { email, password, name } = req.body;
 
@@ -202,7 +201,7 @@ app.post("/api/register", async (req, res) => {
     return res.status(400).json({ error: "Password must be at least 6 characters long" });
   }
 
-  // Check if user already exists
+  
   db.get("SELECT email FROM users WHERE email = ?", [email], async (err, user) => {
     if (err) {
       console.error("Database error:", err.message);
@@ -214,10 +213,10 @@ app.post("/api/register", async (req, res) => {
     }
 
     try {
-      // Hash password
+     
       const hashedPassword = await bcrypt.hash(password, 10);
       
-      // Generate unique userid
+   
       const userid = `QR${Date.now()}${Math.floor(Math.random() * 1000)}`;
       
       db.run(
@@ -239,7 +238,7 @@ app.post("/api/register", async (req, res) => {
   });
 });
 
-// NEW: Login endpoint
+
 app.post("/api/login", (req, res) => {
   const { email, password } = req.body;
 
@@ -264,7 +263,7 @@ app.post("/api/login", (req, res) => {
       }
 
       if (result) {
-        // Get current session data
+       
         db.get(`
           SELECT s.id, s.arrival_time AS ArrivalTime, s.exit_time AS ExitTime
           FROM sessions s
@@ -292,7 +291,7 @@ app.post("/api/login", (req, res) => {
   });
 });
 
-// Updated getESP to work with authenticated users only (but keeping backward compatibility)
+
 app.get("/api/getESP", (req, res) => {
   const query = `
     SELECT 
@@ -534,7 +533,7 @@ app.post("/api/process-payment", async (req, res) => {
     let threeDsUrl;
 
     if (method === "Card") {
-      // Validate card details
+     
       const cardNumber = card_details.card_number.replace(/\s/g, '');
       if (!/^\d{13,19}$/.test(cardNumber)) {
         return res.status(400).json({ error: "Invalid card number format" });
