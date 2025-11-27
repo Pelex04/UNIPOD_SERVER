@@ -1,10 +1,19 @@
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
-const bcrypt = require('bcrypt');
+const cors = require("cors");
+const bcrypt = require("bcrypt");
+require('dotenv').config();
+
 
 const app = express();
 const port = 3000;
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
@@ -23,7 +32,6 @@ try {
 }
 
 db.serialize(() => {
-
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       email TEXT PRIMARY KEY,
@@ -72,58 +80,60 @@ db.serialize(() => {
     )
   `);
 
-
   db.run(`ALTER TABLE users ADD COLUMN password TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding password column:', err.message);
+    if (err && !err.message.includes("duplicate column name")) {
+      console.error("Error adding password column:", err.message);
     } else {
-      console.log('Password column handled');
+      console.log("Password column handled");
     }
   });
 
   db.run(`ALTER TABLE payments ADD COLUMN trans_id TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding trans_id column:', err.message);
+    if (err && !err.message.includes("duplicate column name")) {
+      console.error("Error adding trans_id column:", err.message);
     } else {
-      console.log('Added trans_id column to payments table');
+      console.log("Added trans_id column to payments table");
     }
   });
   db.run(`ALTER TABLE payments ADD COLUMN ref_id TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding ref_id column:', err.message);
+    if (err && !err.message.includes("duplicate column name")) {
+      console.error("Error adding ref_id column:", err.message);
     } else {
-      console.log('Added ref_id column to payments table');
+      console.log("Added ref_id column to payments table");
     }
   });
 
-  
   db.get("SELECT COUNT(*) AS count FROM users", (err, row) => {
     if (err) {
       console.error("Error checking users table:", err.message);
     } else if (row.count === 0) {
       console.log("Inserting sample user data...");
-     
-      bcrypt.hash('password123', 10, (err, hash1) => {
+
+      bcrypt.hash("password123", 10, (err, hash1) => {
         if (err) {
           console.error("Error hashing password:", err);
           return;
         }
-        bcrypt.hash('admin123', 10, (err, hash2) => {
+        bcrypt.hash("admin123", 10, (err, hash2) => {
           if (err) {
             console.error("Error hashing password:", err);
             return;
           }
-          db.run(`
+          db.run(
+            `
             INSERT INTO users (email, name, userid, password) VALUES
             ('test@example.com', 'Test User', 'QR12345', ?),
             ('admin@mubas.edu', 'Admin User', 'QRADMIN', ?)
-          `, [hash1, hash2], (err) => {
-            if (err) {
-              console.error("Error inserting sample data:", err.message);
-            } else {
-              console.log("Sample data inserted successfully.");
+          `,
+            [hash1, hash2],
+            (err) => {
+              if (err) {
+                console.error("Error inserting sample data:", err.message);
+              } else {
+                console.log("Sample data inserted successfully.");
+              }
             }
-          });
+          );
         });
       });
 
@@ -145,7 +155,8 @@ db.serialize(() => {
   });
 });
 
-const paychanguSecretKey = "";
+const paychanguSecretKey = process.env.PAYCHANGU_SECRET_KEY;
+
 
 let supportedOperators = null;
 
@@ -189,55 +200,66 @@ function getOperatorRefId(operatorName) {
   return operator ? operator.ref_id : null;
 }
 
-
 app.post("/api/register", async (req, res) => {
   const { email, password, name } = req.body;
 
   if (!email || !password || !name) {
-    return res.status(400).json({ error: "Email, password, and name are required" });
+    return res
+      .status(400)
+      .json({ error: "Email, password, and name are required" });
   }
 
   if (password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters long" });
+    return res
+      .status(400)
+      .json({ error: "Password must be at least 6 characters long" });
   }
 
-  
-  db.get("SELECT email FROM users WHERE email = ?", [email], async (err, user) => {
-    if (err) {
-      console.error("Database error:", err.message);
-      return res.status(500).json({ error: "Database error" });
-    }
+  db.get(
+    "SELECT email FROM users WHERE email = ?",
+    [email],
+    async (err, user) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ error: "Database error" });
+      }
 
-    if (user) {
-      return res.status(400).json({ error: "User already exists with this email" });
-    }
+      if (user) {
+        return res
+          .status(400)
+          .json({ error: "User already exists with this email" });
+      }
 
-    try {
-     
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-   
-      const userid = `QR${Date.now()}${Math.floor(Math.random() * 1000)}`;
-      
-      db.run(
-        "INSERT INTO users (email, name, userid, password) VALUES (?, ?, ?, ?)",
-        [email, name, userid, hashedPassword],
-        function (err) {
-          if (err) {
-            console.error("Error creating user:", err.message);
-            return res.status(500).json({ error: "Failed to create user" });
+      try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const userid = `QR${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+        db.run(
+          "INSERT INTO users (email, name, userid, password) VALUES (?, ?, ?, ?)",
+          [email, name, userid, hashedPassword],
+          function (err) {
+            if (err) {
+              console.error("Error creating user:", err.message);
+              return res.status(500).json({ error: "Failed to create user" });
+            }
+            console.log(`User created: ${email}`);
+            res
+              .status(201)
+              .json({
+                success: true,
+                message: "User registered successfully",
+                userid: userid,
+              });
           }
-          console.log(`User created: ${email}`);
-          res.status(201).json({ success: true, message: "User registered successfully", userid: userid });
-        }
-      );
-    } catch (hashError) {
-      console.error("Password hashing error:", hashError);
-      res.status(500).json({ error: "Failed to hash password" });
+        );
+      } catch (hashError) {
+        console.error("Password hashing error:", hashError);
+        res.status(500).json({ error: "Failed to hash password" });
+      }
     }
-  });
+  );
 });
-
 
 app.post("/api/login", (req, res) => {
   const { email, password } = req.body;
@@ -263,34 +285,38 @@ app.post("/api/login", (req, res) => {
       }
 
       if (result) {
-       
-        db.get(`
+        db.get(
+          `
           SELECT s.id, s.arrival_time AS ArrivalTime, s.exit_time AS ExitTime
           FROM sessions s
           WHERE s.email = ? AND s.exit_time IS NULL
-        `, [email], (err, session) => {
-          if (err) {
-            console.error("Session fetch error:", err.message);
-            return res.status(500).json({ error: "Failed to fetch session data" });
-          }
-
-          res.json({
-            success: true,
-            user: {
-              Email: user.email,
-              Name: user.name,
-              userid: user.userid,
-              ...(session || {}),
+        `,
+          [email],
+          (err, session) => {
+            if (err) {
+              console.error("Session fetch error:", err.message);
+              return res
+                .status(500)
+                .json({ error: "Failed to fetch session data" });
             }
-          });
-        });
+
+            res.json({
+              success: true,
+              user: {
+                Email: user.email,
+                Name: user.name,
+                userid: user.userid,
+                ...(session || {}),
+              },
+            });
+          }
+        );
       } else {
         res.status(401).json({ error: "Invalid email or password" });
       }
     });
   });
 });
-
 
 app.get("/api/getESP", (req, res) => {
   const query = `
@@ -338,11 +364,9 @@ app.post("/api/updateESP", (req, res) => {
           return res.status(500).json({ error: "Failed to update session" });
         }
         if (this.changes === 0) {
-          return res
-            .status(404)
-            .json({
-              error: "Session not found or does not belong to this email",
-            });
+          return res.status(404).json({
+            error: "Session not found or does not belong to this email",
+          });
         }
         res.status(200).json({ message: "Session updated successfully" });
       }
@@ -494,11 +518,9 @@ app.post("/api/process-payment", async (req, res) => {
   } = req.body;
 
   if (!amount || !currency || !email || !method || !transaction_id) {
-    return res
-      .status(400)
-      .json({
-        error: "Amount, currency, email, method, and transaction_id are required",
-      });
+    return res.status(400).json({
+      error: "Amount, currency, email, method, and transaction_id are required",
+    });
   }
 
   if (
@@ -533,14 +555,15 @@ app.post("/api/process-payment", async (req, res) => {
     let threeDsUrl;
 
     if (method === "Card") {
-     
-      const cardNumber = card_details.card_number.replace(/\s/g, '');
+      const cardNumber = card_details.card_number.replace(/\s/g, "");
       if (!/^\d{13,19}$/.test(cardNumber)) {
         return res.status(400).json({ error: "Invalid card number format" });
       }
-      const [expiryMonth, expiryYear] = card_details.expiry.split('/');
+      const [expiryMonth, expiryYear] = card_details.expiry.split("/");
       if (!/^\d{2}$/.test(expiryMonth) || !/^\d{2,4}$/.test(expiryYear)) {
-        return res.status(400).json({ error: "Invalid expiry date format (MM/YY or MM/YYYY)" });
+        return res
+          .status(400)
+          .json({ error: "Invalid expiry date format (MM/YY or MM/YYYY)" });
       }
 
       const payload = {
@@ -556,15 +579,18 @@ app.post("/api/process-payment", async (req, res) => {
       };
 
       console.log("Card Payment Payload:", JSON.stringify(payload, null, 2));
-      apiResponse = await fetch("https://api.paychangu.com/charge-card/payments", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${paychanguSecretKey}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      apiResponse = await fetch(
+        "https://api.paychangu.com/charge-card/payments",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${paychanguSecretKey}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       const data = await apiResponse.json();
       console.log("Card Payment Response:", JSON.stringify(data, null, 2));
@@ -753,8 +779,14 @@ app.get("/api/verify-payment", async (req, res) => {
             );
 
             if (apiResponse.ok) {
-              const status = data.status === "success" || data.status === "successful" ? "success" : "failed";
-              const message = data.message && data.message.toLowerCase().includes("already") ? "Payment successful" : (data.message || "Payment successful");
+              const status =
+                data.status === "success" || data.status === "successful"
+                  ? "success"
+                  : "failed";
+              const message =
+                data.message && data.message.toLowerCase().includes("already")
+                  ? "Payment successful"
+                  : data.message || "Payment successful";
               db.run(
                 `UPDATE payments SET status = ?, message = ?, trans_id = ?, ref_id = ? WHERE transaction_id = ?`,
                 [
@@ -786,13 +818,14 @@ app.get("/api/verify-payment", async (req, res) => {
                 "PayChangu Verification API Error:",
                 JSON.stringify(data, null, 2)
               );
-              if (data.message && (
-                  data.message.toLowerCase().includes("already") ||
+              if (
+                data.message &&
+                (data.message.toLowerCase().includes("already") ||
                   data.message.toLowerCase().includes("authenticated") ||
                   data.message.toLowerCase().includes("completed") ||
                   data.message.toLowerCase().includes("successful") ||
-                  data.status === "successful"
-                )) {
+                  data.status === "successful")
+              ) {
                 const status = "success";
                 const message = "Payment successful";
                 db.run(
